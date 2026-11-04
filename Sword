@@ -1,0 +1,230 @@
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- RAYFIELD
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Mob Teleporter",
+    LoadingTitle = "Mob Teleporter",
+    LoadingSubtitle = "Orbital System",
+    ConfigurationSaving = {
+        Enabled = false
+    },
+    KeySystem = false
+})
+
+local Tab = Window:CreateTab("Mob Teleport", 4483362458)
+
+-- SETTINGS
+local MobsFolder = Workspace:WaitForChild("Gameplay"):WaitForChild("Mobs")
+
+local SelectedMobs = {}
+local TeleportDelay = 1
+local OrbitalDistance = 1
+local OrbitalEnabled = false
+local Running = false
+
+-- GET MODEL ROOT
+local function GetRoot(Model)
+    if not Model or not Model:IsA("Model") then
+        return nil
+    end
+
+    return Model:FindFirstChild("HumanoidRootPart")
+        or Model.PrimaryPart
+        or Model:FindFirstChildWhichIsA("BasePart")
+end
+
+-- GET UNIQUE MOB NAMES
+local function GetMobNames()
+    local Names = {}
+
+    for _, Mob in ipairs(MobsFolder:GetChildren()) do
+        if Mob:IsA("Model") and GetRoot(Mob) then
+            Names[Mob.Name] = true
+        end
+    end
+
+    local Result = {}
+
+    for Name in pairs(Names) do
+        table.insert(Result, Name)
+    end
+
+    table.sort(Result)
+
+    return Result
+end
+
+-- GET SELECTED MODELS
+local function GetSelectedTargets()
+    local Targets = {}
+
+    for _, Mob in ipairs(MobsFolder:GetChildren()) do
+        if Mob:IsA("Model")
+            and SelectedMobs[Mob.Name]
+            and GetRoot(Mob) then
+
+            table.insert(Targets, Mob)
+        end
+    end
+
+    return Targets
+end
+
+-- TELEPORT BEHIND MOB
+local function TeleportBehind(Mob)
+    local Character = LocalPlayer.Character
+    if not Character then return end
+
+    local PlayerRoot = Character:FindFirstChild("HumanoidRootPart")
+    local MobRoot = GetRoot(Mob)
+
+    if not PlayerRoot or not MobRoot then return end
+
+    local Position =
+        MobRoot.Position - (MobRoot.CFrame.LookVector * OrbitalDistance)
+
+    PlayerRoot.CFrame = CFrame.lookAt(
+        Position,
+        MobRoot.Position
+    )
+end
+
+-- MOB SELECTION
+Tab:CreateSection("Mob Selection")
+
+local MobDropdown = Tab:CreateDropdown({
+    Name = "Select Mob Types",
+    Options = GetMobNames(),
+    CurrentOption = {},
+    MultipleOptions = true,
+
+    Callback = function(Options)
+        SelectedMobs = {}
+
+        for _, Name in ipairs(Options) do
+            SelectedMobs[Name] = true
+        end
+    end
+})
+
+Tab:CreateButton({
+    Name = "Refresh Mob List",
+
+    Callback = function()
+        MobDropdown:Refresh(GetMobNames())
+    end
+})
+
+Tab:CreateButton({
+    Name = "Select All Mob Types",
+
+    Callback = function()
+        local Names = GetMobNames()
+
+        SelectedMobs = {}
+
+        for _, Name in ipairs(Names) do
+            SelectedMobs[Name] = true
+        end
+
+        MobDropdown:Set(Names)
+    end
+})
+
+Tab:CreateButton({
+    Name = "Clear Selection",
+
+    Callback = function()
+        SelectedMobs = {}
+        MobDropdown:Set({})
+    end
+})
+
+-- TELEPORT SETTINGS
+Tab:CreateSection("Teleport Settings")
+
+Tab:CreateSlider({
+    Name = "Target Switch Delay",
+    Range = {0.1, 10},
+    Increment = 0.1,
+    Suffix = " seconds",
+    CurrentValue = 1,
+
+    Callback = function(Value)
+        TeleportDelay = Value
+    end
+})
+
+Tab:CreateToggle({
+    Name = "Orbital Behind Mode",
+    CurrentValue = false,
+
+    Callback = function(Value)
+        OrbitalEnabled = Value
+    end
+})
+
+Tab:CreateSlider({
+    Name = "Orbital Distance",
+    Range = {1, 5},
+    Increment = 0.1,
+    Suffix = " studs",
+    CurrentValue = 1,
+
+    Callback = function(Value)
+        OrbitalDistance = Value
+    end
+})
+
+-- TELEPORT CONTROLS
+Tab:CreateSection("Teleport Controls")
+
+Tab:CreateButton({
+    Name = "Start Auto Teleport",
+
+    Callback = function()
+        if Running then return end
+
+        if #GetSelectedTargets() == 0 then
+            Rayfield:Notify({
+                Title = "Mob Teleporter",
+                Content = "Select at least one mob type first.",
+                Duration = 3
+            })
+            return
+        end
+
+        Running = true
+
+        task.spawn(function()
+            while Running do
+                local Targets = GetSelectedTargets()
+
+                if #Targets == 0 then
+                    break
+                end
+
+                for _, Mob in ipairs(Targets) do
+                    if not Running then
+                        break
+                    end
+
+                    if Mob.Parent == MobsFolder then
+
+                        if OrbitalEnabled then
+                            local StartTime = os.clock()
+
+                            while Running
+                                and Mob.Parent == MobsFolder
+                                and os.clock() - StartTime < TeleportDelay do
+
+                                TeleportBehind(Mob)
+
+               
